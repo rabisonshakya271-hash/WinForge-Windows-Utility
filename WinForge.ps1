@@ -93,7 +93,7 @@ $SoftwareCatalog = @(
     @{Id="Valve.Steam";                Label="Steam";                Desc="Gaming platform"},
     @{Id="Malwarebytes.Malwarebytes";  Label="Malwarebytes";         Desc="Anti-malware scanner"},
     @{Id="Adobe.Acrobat.Reader.64-bit";Label="Adobe Acrobat Reader"; Desc="PDF viewer"},
-    @{Id="Oracle.SQLDeveloper";        Label="Oracle SQL Developer"; Desc="Free IDE for Oracle database development"},
+    @{Id="Oracle.SQLDeveloper";        Label="Oracle SQL Developer"; Desc="Free IDE for Oracle database development (installed to your data drive, not C:)"; Location="\SQLDeveloper"},
     @{Id="OpenJS.NodeJS.LTS";          Label="Node.js (LTS)";        Desc="JavaScript runtime for server-side development"},
     @{Id="MongoDB.Compass.Full";       Label="MongoDB Compass";      Desc="GUI for exploring and managing MongoDB databases"},
     @{Id="Docker.DockerDesktop";       Label="Docker Desktop";       Desc="Container platform for building and running apps"},
@@ -106,6 +106,7 @@ $SoftwareCatalog = @(
     @{Id="OBSProject.OBSStudio";       Label="OBS Studio";           Desc="Free screen recording & live streaming software"},
     @{Id="Ventoy.Ventoy";              Label="Ventoy";                Desc="Create bootable USB drives from multiple ISOs"},
     @{Id="Rufus.Rufus";                Label="Rufus";                 Desc="Create bootable USB drives from a single ISO"},
+    @{Id="Nlitesoft.NTLite";           Label="NTLite";                Desc="Edit and debloat Windows images, integrate updates/drivers, automate setup (free tier available; some features need a paid license)"},
     @{Id="PostgreSQL.PostgreSQL";      Label="PostgreSQL";            Desc="Open-source relational database"},
     @{Id="EclipseFoundation.EclipseIDE"; Label="Eclipse IDE";         Desc="IDE for Java and other language development"},
     @{Id="Oracle.JavaRuntimeEnvironment"; Label="Java Runtime Environment"; Desc="Runtime needed to run Java applications"},
@@ -146,6 +147,21 @@ function Test-Winget {
     return $?
 }
 
+function Get-DataDrive {
+    # Picks the largest non-system fixed drive (D:, E:, ...) to use as the
+    # "data drive" for packages that should not land on C:. Falls back to the
+    # system drive if the machine only has one partition.
+    try {
+        $sysDrive = $env:SystemDrive.TrimEnd('\')
+        $candidate = Get-CimInstance -ClassName Win32_LogicalDisk -ErrorAction Stop |
+            Where-Object { $_.DriveType -eq 3 -and $_.DeviceID -ne $sysDrive -and $_.FreeSpace -gt 1GB } |
+            Sort-Object -Property FreeSpace -Descending |
+            Select-Object -First 1
+        if ($candidate) { return $candidate.DeviceID }
+    } catch {}
+    return $env:SystemDrive.TrimEnd('\')
+}
+
 function Install-SelectedSoftware {
     param([string[]]$PackageIds)
     if (-not (Test-Winget)) {
@@ -155,8 +171,21 @@ function Install-SelectedSoftware {
     Write-Log "=== Installing selected software ===" "#82C9FF"
     foreach ($id in $PackageIds) {
         try {
+            # Catalog entries may declare a Location (e.g. Oracle SQL Developer),
+            # meaning "don't put this on C:". Resolve it against the data drive.
+            $locArg = ""
+            $entry = $SoftwareCatalog | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+            if ($entry -and $entry.Location) {
+                $targetPath = (Get-DataDrive) + $entry.Location
+                if (-not (Test-Path $targetPath)) {
+                    New-Item -Path $targetPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+                }
+                $locArg = " --location `"$targetPath`""
+                Write-Log "$id will be installed to: $targetPath" "#82C9FF"
+            }
+
             Write-Log "Installing $id ..."
-            $p = Start-Process -FilePath "winget" -ArgumentList "install -e --id $id --source winget --silent --accept-source-agreements --accept-package-agreements" -Wait -PassThru -NoNewWindow
+            $p = Start-Process -FilePath "winget" -ArgumentList "install -e --id $id --source winget --silent --accept-source-agreements --accept-package-agreements$locArg" -Wait -PassThru -NoNewWindow
             if ($p.ExitCode -eq 0) { Write-Log "Installed: $id" "#7CFC9C" }
             else {
                 # Some catalog entries are Microsoft Store product codes, which don't
