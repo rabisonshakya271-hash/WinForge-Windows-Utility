@@ -110,7 +110,7 @@ $SoftwareCatalog = @(
     @{Id="PostgreSQL.PostgreSQL";      Label="PostgreSQL";            Desc="Open-source relational database"},
     @{Id="EclipseFoundation.EclipseIDE"; Label="Eclipse IDE";         Desc="IDE for Java and other language development"},
     @{Id="Oracle.JavaRuntimeEnvironment"; Label="Java Runtime Environment"; Desc="Runtime needed to run Java applications"},
-    @{Id="Microsoft.Office";           Label="Microsoft Office";      Desc="Installs Office via the official Microsoft installer (requires your own valid license/subscription to activate)"},
+    @{Id="Office.LTSC.ProPlus2021";    Label="Microsoft Office LTSC 2021"; Desc="Office LTSC Professional Plus 2021 (perpetual, non-subscription). Deployed via the official Office Deployment Tool — requires your own valid volume license key to activate"; Handler="OfficeLTSC2021"},
     @{Id="Tonec.InternetDownloadManager"; Label="Internet Download Manager"; Desc="Download manager (shareware — requires a paid license after trial)"},
     @{Id="Trimble.SketchUp";           Label="SketchUp";              Desc="3D modeling software (trial/subscription license required)"},
     @{Id="BlenderFoundation.Blender";  Label="Blender";                Desc="Free, open-source 3D creation suite"},
@@ -160,6 +160,93 @@ function Get-DataDrive {
         if ($candidate) { return $candidate.DeviceID }
     } catch {}
     return $env:SystemDrive.TrimEnd('\')
+}
+
+function Find-OdtSetup {
+    # Locates the Office Deployment Tool's setup.exe. winget's
+    # Microsoft.OfficeDeploymentTool package extracts it, but the exact folder
+    # varies by version, so check the usual spots then fall back to a search.
+    $candidates = @(
+        "${env:ProgramFiles}\OfficeDeploymentTool\setup.exe",
+        "${env:ProgramFiles(x86)}\OfficeDeploymentTool\setup.exe",
+        "${env:ProgramFiles}\Microsoft Office Deployment Tool\setup.exe"
+    )
+    foreach ($c in $candidates) { if (Test-Path $c) { return $c } }
+
+    foreach ($base in @("${env:ProgramFiles}", "${env:ProgramFiles(x86)}")) {
+        if (Test-Path $base) {
+            $found = Get-ChildItem -Path $base -Filter "setup.exe" -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.DirectoryName -match "Office.*Deployment" } |
+                Select-Object -First 1
+            if ($found) { return $found.FullName }
+        }
+    }
+    return $null
+}
+
+function Install-OfficeLTSC2021 {
+    # Office LTSC 2021 is volume-licensed and has no winget package of its own.
+    # Microsoft's supported path is the Office Deployment Tool driven by a
+    # configuration.xml pinned to the PerpetualVL2021 channel.
+    if (-not (Test-Winget)) {
+        Write-Log "winget (App Installer) was not found. Install 'App Installer' from the Microsoft Store, then retry." "#FF7A7A"
+        return
+    }
+
+    Write-Log "=== Installing Microsoft Office LTSC 2021 ===" "#82C9FF"
+    Write-Log "Fetching the Office Deployment Tool..." "#B5BAC1"
+    try {
+        $p = Start-Process -FilePath "winget" -ArgumentList "install -e --id Microsoft.OfficeDeploymentTool --source winget --silent --accept-source-agreements --accept-package-agreements" -Wait -PassThru -NoNewWindow
+        if ($p.ExitCode -ne 0) {
+            Write-Log "winget returned code $($p.ExitCode) for the Office Deployment Tool (it may already be installed)." "#FFB86B"
+        }
+    } catch {
+        Write-Log "Failed to launch winget: $($_.Exception.Message)" "#FF7A7A"
+        return
+    }
+
+    $setup = Find-OdtSetup
+    if (-not $setup) {
+        Write-Log "The Office Deployment Tool's setup.exe wasn't found after install. Install the Office Deployment Tool manually from Microsoft, then retry." "#FF7A7A"
+        return
+    }
+    Write-Log "Office Deployment Tool found at: $setup"
+
+    $odtDir = Split-Path -Parent $setup
+    $configPath = Join-Path $odtDir "WinForge-OfficeLTSC2021.xml"
+    $config = @'
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="PerpetualVL2021">
+    <Product ID="ProPlus2021Volume">
+      <Language ID="MatchOS" />
+ețeaua
+    </Product>
+  </Add>
+  <Display Level="None" AcceptEULA="TRUE" />
+  <Property Name="AUTOACTIVATE" Value="0" />
+  <RemoveMSI />
+</Configuration>
+'@
+    try {
+        Set-Content -Path $configPath -Value $config -Encoding UTF8 -Force
+        Write-Log "Wrote deployment config: $configPath"
+    } catch {
+        Write-Log "Could not write the Office configuration file: $($_.Exception.Message)" "#FF7A7A"
+        return
+    }
+
+    Write-Log "Downloading and installing Office LTSC 2021. This is a large download and can take a while..." "#B5BAC1"
+    try {
+        $p2 = Start-Process -FilePath $setup -ArgumentList "/configure `"$configPath`"" -Wait -PassThru -WorkingDirectory $odtDir -NoNewWindow
+        if ($p2.ExitCode -eq 0) {
+            Write-Log "Office LTSC 2021 installed." "#7CFC9C"
+            Write-Log "Activation is not automatic: enter your own volume license key via Office, or with slmgr/ospp as your organization requires." "#FFB86B"
+        } else {
+            Write-Log "Office Deployment Tool returned code $($p2.ExitCode). Check %TEMP% for the Office setup logs." "#FFB86B"
+        }
+    } catch {
+        Write-Log "Office LTSC 2021 install failed: $($_.Exception.Message)" "#FF7A7A"
+    }
 }
 
 function Install-SelectedSoftware {
