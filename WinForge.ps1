@@ -93,7 +93,7 @@ $SoftwareCatalog = @(
     @{Id="Valve.Steam";                Label="Steam";                Desc="Gaming platform"},
     @{Id="Malwarebytes.Malwarebytes";  Label="Malwarebytes";         Desc="Anti-malware scanner"},
     @{Id="Adobe.Acrobat.Reader.64-bit";Label="Adobe Acrobat Reader"; Desc="PDF viewer"},
-    @{Id="Oracle.SQLDeveloper";        Label="Oracle SQL Developer"; Desc="Free IDE for Oracle database development (installed to your data drive, not C:)"; Location="\SQLDeveloper"},
+    @{Id="Oracle.SQLDeveloper";        Label="Oracle SQL Developer"; Desc="Downloaded directly from Oracle's official site and extracted to your data drive (not C:) — no installer, portable zip"; Handler="OracleSQLDeveloper"},
     @{Id="OpenJS.NodeJS.LTS";          Label="Node.js (LTS)";        Desc="JavaScript runtime for server-side development"},
     @{Id="MongoDB.Compass.Full";       Label="MongoDB Compass";      Desc="GUI for exploring and managing MongoDB databases"},
     @{Id="Docker.DockerDesktop";       Label="Docker Desktop";       Desc="Container platform for building and running apps"},
@@ -219,7 +219,6 @@ function Install-OfficeLTSC2021 {
   <Add OfficeClientEdition="64" Channel="PerpetualVL2021">
     <Product ID="ProPlus2021Volume">
       <Language ID="MatchOS" />
-ețeaua
     </Product>
   </Add>
   <Display Level="None" AcceptEULA="TRUE" />
@@ -249,6 +248,61 @@ ețeaua
     }
 }
 
+function Install-OracleSQLDeveloper {
+    # Oracle SQL Developer has no winget package and no installer of its own --
+    # Oracle ships it as a portable zip. Unlike the JDK, it does not require
+    # signing in to an Oracle account to download. We fetch it straight from
+    # Oracle's official download page and extract it to the data drive.
+    Write-Log "=== Installing Oracle SQL Developer (from oracle.com) ===" "#82C9FF"
+
+    $downloadPageUrl = "https://www.oracle.com/database/sqldeveloper/technologies/download/"
+    $zipUrl = $null
+
+    try {
+        Write-Log "Checking Oracle's download page for the current version..."
+        $page = Invoke-WebRequest -Uri $downloadPageUrl -UseBasicParsing -ErrorAction Stop
+        $match = [regex]::Match($page.Content, 'https://download\.oracle\.com/otn_software/java/sqldeveloper/sqldeveloper-[\d\.]+-x64\.zip')
+        if ($match.Success) { $zipUrl = $match.Value }
+    } catch {
+        Write-Log "Could not reach Oracle's download page directly: $($_.Exception.Message)" "#FFB86B"
+    }
+
+    if (-not $zipUrl) {
+        # Fallback to the latest known-good direct link if the page layout
+        # changes or is unreachable from this network.
+        $zipUrl = "https://download.oracle.com/otn_software/java/sqldeveloper/sqldeveloper-26.2.0.186.2220-x64.zip"
+        Write-Log "Using fallback download URL: $zipUrl" "#FFB86B"
+    } else {
+        Write-Log "Found current version at: $zipUrl"
+    }
+
+    $dataDrive = Get-DataDrive
+    $destDir = Join-Path $dataDrive "SQLDeveloper"
+    $zipPath = Join-Path $env:TEMP "sqldeveloper-download.zip"
+
+    try {
+        if (-not (Test-Path $destDir)) {
+            New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+        }
+
+        Write-Log "Downloading Oracle SQL Developer from oracle.com (this is a large file, please wait)..." "#B5BAC1"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+
+        Write-Log "Extracting to $destDir ..."
+        Expand-Archive -Path $zipPath -DestinationPath $destDir -Force -ErrorAction Stop
+        Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+
+        $exe = Get-ChildItem -Path $destDir -Filter "sqldeveloper.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($exe) {
+            Write-Log "Oracle SQL Developer installed at: $($exe.FullName)" "#7CFC9C"
+        } else {
+            Write-Log "Extraction finished but sqldeveloper.exe wasn't found under $destDir. Check the folder manually." "#FFB86B"
+        }
+    } catch {
+        Write-Log "Oracle SQL Developer install failed: $($_.Exception.Message)" "#FF7A7A"
+    }
+}
+
 function Install-SelectedSoftware {
     param([string[]]$PackageIds)
     if (-not (Test-Winget)) {
@@ -258,10 +312,22 @@ function Install-SelectedSoftware {
     Write-Log "=== Installing selected software ===" "#82C9FF"
     foreach ($id in $PackageIds) {
         try {
+            $entry = $SoftwareCatalog | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+
+            # Some entries (e.g. Office LTSC 2021) have no winget package and
+            # are deployed by a dedicated function instead.
+            if ($entry -and $entry.Handler) {
+                switch ($entry.Handler) {
+                    "OfficeLTSC2021" { Install-OfficeLTSC2021 }
+                    "OracleSQLDeveloper" { Install-OracleSQLDeveloper }
+                    default { Write-Log "Unknown handler '$($entry.Handler)' for $id" "#FF7A7A" }
+                }
+                continue
+            }
+
             # Catalog entries may declare a Location (e.g. Oracle SQL Developer),
             # meaning "don't put this on C:". Resolve it against the data drive.
             $locArg = ""
-            $entry = $SoftwareCatalog | Where-Object { $_.Id -eq $id } | Select-Object -First 1
             if ($entry -and $entry.Location) {
                 $targetPath = (Get-DataDrive) + $entry.Location
                 if (-not (Test-Path $targetPath)) {
