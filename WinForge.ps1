@@ -126,6 +126,110 @@ $SoftwareCatalog = @(
     @{Id="9WZDNCRFHWD2";               Label="Microsoft Solitaire Collection"; Desc="Classic Solitaire card games (Microsoft Store app)"}
 )
 
+# WinUtil-style Tweaks catalog. Each entry's "Presets" list says which preset
+# buttons (Minimal / Standard / Advanced) pre-select it, mirroring
+# christitus.com/win's Tweaks tab. "Caution" entries are the ones WinUtil
+# itself flags as impactful and are never included in Minimal or Standard.
+$TweaksCatalog = @(
+    @{Id="Tw_Telemetry";       Label="Disable Telemetry";                 Desc="Turns off diagnostic data collection sent to Microsoft.";
+      Presets=@("Minimal","Standard"); Caution=$false
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0 }
+      Undo={ Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" } },
+
+    @{Id="Tw_WifiSense";       Label="Disable Wi-Fi Sense";                Desc="Stops Windows from auto-connecting to shared Wi-Fi hotspots.";
+      Presets=@("Minimal","Standard"); Caution=$false
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" "Value" 0
+              Set-TwPath "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" "Value" 0 }
+      Undo={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" "Value" 1
+             Set-TwPath "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" "Value" 1 } },
+
+    @{Id="Tw_ActivityHistory"; Label="Disable Activity History";          Desc="Stops Windows from recording and syncing your activity timeline.";
+      Presets=@("Minimal","Standard"); Caution=$false
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "EnableActivityFeed" 0
+              Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "PublishUserActivities" 0
+              Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "UploadUserActivities" 0 }
+      Undo={ Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "EnableActivityFeed"
+             Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "PublishUserActivities"
+             Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "UploadUserActivities" } },
+
+    @{Id="Tw_LocationTracking"; Label="Disable Location Tracking";        Desc="Denies apps access to your device's location.";
+      Presets=@("Minimal","Standard"); Caution=$false
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" "Value" "Deny" -AsString }
+      Undo={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" "Value" "Allow" -AsString } },
+
+    @{Id="Tw_AdvertisingId";   Label="Disable Advertising ID";            Desc="Stops apps from using a unique ID to personalize ads.";
+      Presets=@("Minimal","Standard"); Caution=$false
+      Apply={ Set-TwPath "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo" "Enabled" 0 }
+      Undo={ Set-TwPath "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo" "Enabled" 1 } },
+
+    @{Id="Tw_BingSearch";      Label="Disable Bing Search in Start Menu"; Desc="Removes web results and Bing suggestions from Start menu search.";
+      Presets=@("Standard"); Caution=$false
+      Apply={ Set-TwPath "HKCU:\SOFTWARE\Policies\Microsoft\Windows\Explorer" "DisableSearchBoxSuggestions" 1
+              Set-TwPath "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" "BingSearchEnabled" 0 }
+      Undo={ Remove-TwValue "HKCU:\SOFTWARE\Policies\Microsoft\Windows\Explorer" "DisableSearchBoxSuggestions"
+             Set-TwPath "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" "BingSearchEnabled" 1 } },
+
+    @{Id="Tw_StickyKeysPrompt"; Label="Disable Sticky Keys Prompt";       Desc="Stops the Sticky Keys dialog from popping up when Shift is pressed 5 times.";
+      Presets=@("Standard"); Caution=$false
+      Apply={ Set-TwPath "HKCU:\Control Panel\Accessibility\StickyKeys" "Flags" "506" -AsString }
+      Undo={ Set-TwPath "HKCU:\Control Panel\Accessibility\StickyKeys" "Flags" "510" -AsString } },
+
+    @{Id="Tw_DiskCleanup";     Label="Run Disk Cleanup";                  Desc="Runs the built-in Disk Cleanup utility once, right now.";
+      Presets=@("Standard"); Caution=$false
+      Apply={ Write-Log "Launching Disk Cleanup..."; Start-Process -FilePath cleanmgr.exe -ArgumentList "/sagerun:1" -WindowStyle Hidden -ErrorAction SilentlyContinue }
+      Undo={ Write-Log "Disk Cleanup is a one-time action; there is nothing to undo." "#FFB86B" } },
+
+    @{Id="Tw_Hibernation";     Label="Disable Hibernation";               Desc="Turns off hibernation and removes hiberfil.sys to free up disk space.";
+      Presets=@("Standard"); Caution=$false
+      Apply={ Write-Log "Disabling hibernation..."; & powercfg /hibernate off 2>&1 | Out-Null }
+      Undo={ Write-Log "Re-enabling hibernation..."; & powercfg /hibernate on 2>&1 | Out-Null } },
+
+    @{Id="Tw_EndTaskRightClick"; Label="Enable 'End Task' in Taskbar Right-Click"; Desc="Adds End Task to the taskbar right-click menu (Windows 11 only).";
+      Presets=@("Standard"); Caution=$false
+      Apply={ if ($IsWin11) { Set-TwPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarEndTask" 1 } else { Write-Log "Windows 11 only. Skipped." "#FFB86B" } }
+      Undo={ if ($IsWin11) { Set-TwPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarEndTask" 0 } } },
+
+    @{Id="Tw_DisableIPv6";     Label="Disable IPv6";                      Desc="Caution: disables IPv6 network-wide. Can break VPNs and some modern networking.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={ Set-TwPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisabledComponents" 0xFF }
+      Undo={ Set-TwPath "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisabledComponents" 0 } },
+
+    @{Id="Tw_RemoveOneDrive";  Label="Remove OneDrive";                   Desc="Caution: uninstalls OneDrive. Files stay on disk but stop syncing.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={
+          Write-Log "Uninstalling OneDrive..."
+          $od = if (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") { "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" } else { "$env:SystemRoot\System32\OneDriveSetup.exe" }
+          if (Test-Path $od) { Start-Process -FilePath $od -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue }
+      }
+      Undo={ Write-Log "To restore OneDrive, use the Software page and install 'Microsoft OneDrive'." "#FFB86B" } },
+
+    @{Id="Tw_DebloatEdge";     Label="Debloat Microsoft Edge";            Desc="Caution: disables Edge's first-run experience, shopping assistant, and personalized recommendations.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "HideFirstRunExperience" 1
+              Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "PersonalizationReportingEnabled" 0
+              Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "ShowRecommendationsEnabled" 0
+              Set-TwPath "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "EdgeShoppingAssistantEnabled" 0 }
+      Undo={ Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "HideFirstRunExperience"
+             Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "PersonalizationReportingEnabled"
+             Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "ShowRecommendationsEnabled"
+             Remove-TwValue "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "EdgeShoppingAssistantEnabled" } },
+
+    @{Id="Tw_DisableUAC";      Label="Disable User Account Control (UAC)"; Desc="Caution: turns off UAC prompts entirely. Reduces protection against unauthorized system changes. Requires a restart.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "EnableLUA" 0 }
+      Undo={ Set-TwPath "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "EnableLUA" 1 } },
+
+    @{Id="Tw_RemoveStoreApps"; Label="Remove All Microsoft Store Apps";  Desc="Caution: removes every Microsoft Store app for the current user, beyond the curated bloat list in Optimize. Hard to fully reverse.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={ Write-Log "Removing all Microsoft Store apps for this user..."; Get-AppxPackage | Where-Object { -not $_.IsFramework -and -not $_.NonRemovable } | Remove-AppxPackage -ErrorAction SilentlyContinue }
+      Undo={ Write-Log "Reinstall needed apps individually from the Software page or the Microsoft Store." "#FFB86B" } },
+
+    @{Id="Tw_DisableDefenderRT"; Label="Disable Windows Defender Real-Time Protection"; Desc="Caution: turns off real-time antivirus scanning. Only for advanced users who run other protection.";
+      Presets=@("Advanced"); Caution=$true
+      Apply={ try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop; Write-Log "Real-time protection disabled." "#FFB86B" } catch { Write-Log "Could not change Defender settings: $($_.Exception.Message)" "#FF7A7A" } }
+      Undo={ try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop; Write-Log "Real-time protection re-enabled." "#7CFC9C" } catch { Write-Log "Could not change Defender settings: $($_.Exception.Message)" "#FF7A7A" } } }
+)
+
 # ---------------------------------------------------------------------------
 # 3. Logging helper (shared across all sections)
 # ---------------------------------------------------------------------------
@@ -136,6 +240,35 @@ function Write-Log {
     $run.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString($color)
     $script:LogParagraph.Inlines.Add($run)
     $script:LogViewer.ScrollToEnd()
+}
+
+function Set-TwPath {
+    # Small registry-set helper used by $TweaksCatalog entries so each tweak
+    # can stay a one-liner. Defaults to DWord; pass -AsString for REG_SZ.
+    param([string]$Path, [string]$Name, $Value, [switch]$AsString)
+    try {
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+        if ($AsString) {
+            New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType String -Force | Out-Null
+        } else {
+            New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType DWord -Force | Out-Null
+        }
+        Write-Log "Set $Name = $Value ($Path)"
+    } catch {
+        Write-Log "Failed to set $Name at $Path : $($_.Exception.Message)" "#FF7A7A"
+    }
+}
+
+function Remove-TwValue {
+    param([string]$Path, [string]$Name)
+    try {
+        if (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+            Write-Log "Removed $Name ($Path)"
+        }
+    } catch {
+        Write-Log "Failed to remove $Name at $Path : $($_.Exception.Message)" "#FFB86B"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -1246,6 +1379,7 @@ function New-CustomWindowsISO {
                     <RadioButton x:Name="NavOptimize"  Content="⚡  Optimize"          Style="{StaticResource NavButton}" GroupName="nav"/>
                     <RadioButton x:Name="NavRepair"    Content="🛠  System Repair"     Style="{StaticResource NavButton}" GroupName="nav"/>
                     <RadioButton x:Name="NavCustomize" Content="🎨  Customize"         Style="{StaticResource NavButton}" GroupName="nav"/>
+                    <RadioButton x:Name="NavTweaks"    Content="🧩  Tweaks"            Style="{StaticResource NavButton}" GroupName="nav"/>
                     <RadioButton x:Name="NavAdvanced"  Content="🧪  Advanced Tweaks"   Style="{StaticResource NavButton}" GroupName="nav"/>
                     <RadioButton x:Name="NavIso"       Content="💿  Custom ISO"        Style="{StaticResource NavButton}" GroupName="nav"/>
                     <RadioButton x:Name="NavLog"       Content="📜  Activity Log"      Style="{StaticResource NavButton}" GroupName="nav"/>
@@ -1529,6 +1663,243 @@ function New-CustomWindowsISO {
                     </StackPanel>
                 </ScrollViewer>
 
+                <!-- PAGE: TWEAKS (Standard/Minimal + Advanced, WinUtil-style) -->
+                <ScrollViewer x:Name="PageTweaks" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                    <StackPanel>
+                        <Border Style="{StaticResource OptionRow}" Background="#17202B">
+                            <StackPanel>
+                                <TextBlock Text="Standard vs Advanced" Style="{StaticResource OptionTitle}" FontSize="15"/>
+                                <TextBlock Text="Standard/Minimal is a short, safe, recommended set of tweaks. Advanced adds a longer list of deeper tweaks for people who want more control. Switch between them below; your checkbox choices in each view are kept independently." Style="{StaticResource OptionDesc}" Margin="0,4,0,10"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="BtnTweaksModeStandard" Content="Standard / Minimal" Style="{StaticResource ActionButton}" Padding="18,9" Margin="0,0,10,0"/>
+                                    <Button x:Name="BtnTweaksModeAdvanced" Content="Advanced" Style="{StaticResource SecondaryButton}" Padding="18,9" Margin="0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- STANDARD / MINIMAL TWEAKS -->
+                        <StackPanel x:Name="TweaksStandardPanel" Visibility="Visible">
+                            <TextBlock Text="STANDARD / MINIMAL" Style="{StaticResource SectionHeader}"/>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Create System Restore point first" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Strongly recommended before applying any tweaks." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdRestore" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Remove pre-installed bloatware" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Xbox apps, 3D Viewer, Skype, Solitaire, Mixed Reality Portal, Teams (consumer), etc." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdBloatware" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable telemetry &amp; data collection" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Turns off diagnostic data, advertising ID, and consumer feature suggestions." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdTelemetry" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable Cortana &amp; web search" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Removes Bing web results and Cortana integration from Start menu search." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdCortana" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable background apps" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Stops Store apps running and syncing in the background." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdBackgroundApps" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Clean temp files &amp; cache" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Clears %TEMP%, Windows\Temp, and Prefetch to free up space." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakStdTemp" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Button x:Name="BtnApplyTweaksStandard" Content="Apply Standard / Minimal Tweaks" Style="{StaticResource ActionButton}" Margin="0,16,0,0" HorizontalAlignment="Left" Padding="24,12"/>
+                        </StackPanel>
+
+                        <!-- ADVANCED TWEAKS (within Tweaks section) -->
+                        <StackPanel x:Name="TweaksAdvancedPanel" Visibility="Collapsed">
+                            <TextBlock Text="ADVANCED" Style="{StaticResource SectionHeader}"/>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable Fast Startup" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Turns off hybrid boot only (hibernation itself is untouched)." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvFastStartup" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Enable NTFS long path support" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Lets apps use file paths longer than 260 characters." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvLongPaths" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="High Performance power plan" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Switches the active Windows power scheme to High Performance." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvPower" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable startup bloat" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Stops OneDrive, Spotify, Skype, Teams, etc. auto-launching at sign-in." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvStartup" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Network latency tweaks" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Tunes TCP auto-tuning and RSS for smoother networking." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvNetwork" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Enable Storage Sense" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Turns on Windows' built-in automatic disk cleanup." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvStorageSense" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Classic right-click context menu (Windows 11)" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Restores the full Windows 10-style context menu." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvClassicMenu" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Align taskbar icons left (Windows 11)" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Classic-style left alignment instead of centered icons." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvTaskbarLeft" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable Widgets (Windows 11)" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Removes the Widgets icon and panel from the taskbar." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvWidgets" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable Chat/Teams icon (Windows 11)" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Removes the Chat icon from the taskbar." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvChatIcon" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Show file extensions" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Displays file extensions (.txt, .exe, etc.) in File Explorer." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvFileExt" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Show hidden files" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Reveals hidden files and folders in File Explorer." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvHiddenFiles" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Enable Dark Mode" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Applies dark theme to apps and system UI." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvDarkMode" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Enable Clipboard History" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Turns on Windows key + V clipboard history." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvClipboardHistory" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Increase icon cache size" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Helps folders with lots of files stop needing icons redrawn." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvIconCache" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Restore 'End Task' in taskbar right-click (Windows 11)" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Adds End Task back to the taskbar right-click menu." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvTaskbarEndTask" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource OptionRow}">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Disable common background services" Style="{StaticResource OptionTitle}"/>
+                                        <TextBlock Text="Uses the same service selection as the Optimize page (DiagTrack, Xbox services, etc.)." Style="{StaticResource OptionDesc}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTweakAdvServices" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Button x:Name="BtnApplyTweaksAdvanced" Content="Apply Advanced Tweaks" Style="{StaticResource ActionButton}" Margin="0,16,0,0" HorizontalAlignment="Left" Padding="24,12"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
                 <!-- PAGE: ADVANCED TWEAKS -->
                 <ScrollViewer x:Name="PageAdvanced" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                     <StackPanel>
@@ -1764,14 +2135,17 @@ $reader = New-Object System.Xml.XmlNodeReader $xaml
 $Window = [Windows.Markup.XamlReader]::Load($reader)
 
 $names = @(
-    "NavSoftware","NavOptimize","NavRepair","NavCustomize","NavAdvanced","NavIso","NavLog",
-    "PageSoftware","PageOptimize","PageRepair","PageCustomize","PageAdvanced","PageIso","PageLog",
+    "NavSoftware","NavOptimize","NavRepair","NavCustomize","NavTweaks","NavAdvanced","NavIso","NavLog",
+    "PageSoftware","PageOptimize","PageRepair","PageCustomize","PageTweaks","PageAdvanced","PageIso","PageLog",
     "PageTitle","PageSubtitle","OSLabelText","LogoImage",
     "SoftwarePanel","BtnInstallSoftware","BtnUninstallSoftware",
     "ChkRestore","ChkBloatware","ChkStartup","ChkTelemetry","ChkCortana",
     "ChkServicesMaster","ServicesPanel","ChkVisuals","ChkPower","ChkTemp","ChkNetwork","BtnApplyOptimize",
     "BtnFullRepair","BtnSFC","BtnDISM","BtnComponentCleanup","BtnResetWU","BtnResetNetwork","BtnCheckDisk","BtnRebuildSearch",
     "ChkDarkMode","ChkTaskbarLeft","ChkClassicMenu","ChkWidgets","ChkChatIcon","ChkFileExt","ChkHiddenFiles","ChkLockScreen","BtnApplyCustomize",
+    "BtnTweaksModeStandard","BtnTweaksModeAdvanced","TweaksStandardPanel","TweaksAdvancedPanel",
+    "ChkTweakStdRestore","ChkTweakStdBloatware","ChkTweakStdTelemetry","ChkTweakStdCortana","ChkTweakStdBackgroundApps","ChkTweakStdTemp","BtnApplyTweaksStandard",
+    "ChkTweakAdvFastStartup","ChkTweakAdvLongPaths","ChkTweakAdvPower","ChkTweakAdvStartup","ChkTweakAdvNetwork","ChkTweakAdvStorageSense","ChkTweakAdvClassicMenu","ChkTweakAdvTaskbarLeft","ChkTweakAdvWidgets","ChkTweakAdvChatIcon","ChkTweakAdvFileExt","ChkTweakAdvHiddenFiles","ChkTweakAdvDarkMode","ChkTweakAdvClipboardHistory","ChkTweakAdvIconCache","ChkTweakAdvTaskbarEndTask","ChkTweakAdvServices","BtnApplyTweaksAdvanced",
     "ChkLongPaths","ChkVerboseStatus","ChkFastStartup","ChkStorageSense","ChkClockSeconds","ChkMenuDelay","ChkExplorerThisPC","ChkIconCache","ChkTaskbarEndTask","ChkClipboardHistory","ChkBackgroundApps","BtnApplyAdvanced",
     "TxtSourceIso","BtnBrowseSourceIso","TxtOutputIso","BtnBrowseOutputIso","ChkIsoBloatware","ChkIsoTelemetry","ChkIsoOOBE","TxtOscdimgPath","BtnBrowseOscdimg","BtnDownloadOscdimg","BtnBuildIso",
     "LogBox","BtnViewLog","StatusText"
@@ -1871,6 +2245,7 @@ $pages = @{
     "NavOptimize"  = @{Page=$ctrl["PageOptimize"];  Title="Optimize";         Sub="Debloat, privacy, services, and performance tweaks."}
     "NavRepair"    = @{Page=$ctrl["PageRepair"];    Title="System Repair";    Sub="Fix corrupted files, broken updates, and network issues."}
     "NavCustomize" = @{Page=$ctrl["PageCustomize"]; Title="Customize";        Sub="Windows 10 & 11 UI/UX tweaks."}
+    "NavTweaks"    = @{Page=$ctrl["PageTweaks"];    Title="Tweaks";           Sub="Standard/Minimal recommended tweaks, or the full Advanced set."}
     "NavAdvanced"  = @{Page=$ctrl["PageAdvanced"];  Title="Advanced Tweaks";  Sub="Deeper, still-safe tweaks that won't break Windows Update or system functionality."}
     "NavIso"       = @{Page=$ctrl["PageIso"];       Title="Custom ISO";       Sub="Build a de-bloated, unattended Windows install image."}
     "NavLog"       = @{Page=$ctrl["PageLog"];       Title="Activity Log";     Sub="Everything the app has done this session."}
@@ -2030,6 +2405,69 @@ $ctrl["BtnApplyCustomize"].Add_Click({
 
     Write-Log "=== Customize pass complete. ===" "#4FD1C5"
     $ctrl["StatusText"].Text = "Customizations applied."
+})
+
+# --- Tweaks: Standard/Minimal vs Advanced mode toggle ---
+$ctrl["BtnTweaksModeStandard"].Add_Click({
+    $ctrl["TweaksStandardPanel"].Visibility = "Visible"
+    $ctrl["TweaksAdvancedPanel"].Visibility = "Collapsed"
+    $ctrl["BtnTweaksModeStandard"].Style = $Window.FindResource("ActionButton")
+    $ctrl["BtnTweaksModeAdvanced"].Style = $Window.FindResource("SecondaryButton")
+})
+$ctrl["BtnTweaksModeAdvanced"].Add_Click({
+    $ctrl["TweaksStandardPanel"].Visibility = "Collapsed"
+    $ctrl["TweaksAdvancedPanel"].Visibility = "Visible"
+    $ctrl["BtnTweaksModeAdvanced"].Style = $Window.FindResource("ActionButton")
+    $ctrl["BtnTweaksModeStandard"].Style = $Window.FindResource("SecondaryButton")
+})
+
+# --- Apply Tweaks: Standard / Minimal ---
+$ctrl["BtnApplyTweaksStandard"].Add_Click({
+    $ctrl["NavLog"].IsChecked = $true
+    Write-Log "Starting Standard/Minimal Tweaks pass..." "#4FD1C5"
+
+    if ($ctrl["ChkTweakStdRestore"].IsChecked)         { New-RestorePoint }
+    if ($ctrl["ChkTweakStdBloatware"].IsChecked)       { Remove-Bloatware }
+    if ($ctrl["ChkTweakStdTelemetry"].IsChecked)       { Disable-Telemetry }
+    if ($ctrl["ChkTweakStdCortana"].IsChecked)         { Disable-CortanaWebSearch }
+    if ($ctrl["ChkTweakStdBackgroundApps"].IsChecked)  { Disable-BackgroundApps }
+    if ($ctrl["ChkTweakStdTemp"].IsChecked)            { Clear-TempFiles }
+
+    Write-Log "=== Standard/Minimal Tweaks pass complete. ===" "#4FD1C5"
+    $ctrl["StatusText"].Text = "Standard/Minimal tweaks applied."
+})
+
+# --- Apply Tweaks: Advanced ---
+$ctrl["BtnApplyTweaksAdvanced"].Add_Click({
+    $ctrl["NavLog"].IsChecked = $true
+    Write-Log "Starting Advanced Tweaks pass..." "#4FD1C5"
+    $needsExplorerRestart = $false
+
+    if ($ctrl["ChkTweakAdvFastStartup"].IsChecked)       { Disable-FastStartup }
+    if ($ctrl["ChkTweakAdvLongPaths"].IsChecked)         { Enable-LongPaths }
+    if ($ctrl["ChkTweakAdvPower"].IsChecked)             { Set-HighPerformancePower }
+    if ($ctrl["ChkTweakAdvStartup"].IsChecked)           { Disable-StartupBloat }
+    if ($ctrl["ChkTweakAdvNetwork"].IsChecked)           { Optimize-Network }
+    if ($ctrl["ChkTweakAdvStorageSense"].IsChecked)      { Enable-StorageSense }
+    if ($ctrl["ChkTweakAdvClassicMenu"].IsChecked)       { Enable-ClassicContextMenu; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvTaskbarLeft"].IsChecked)       { Set-TaskbarAlignLeft; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvWidgets"].IsChecked)           { Disable-Widgets; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvChatIcon"].IsChecked)          { Disable-ChatIcon; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvFileExt"].IsChecked)           { Show-FileExtensions; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvHiddenFiles"].IsChecked)       { Show-HiddenFiles; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvDarkMode"].IsChecked)          { Set-DarkMode; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvClipboardHistory"].IsChecked)  { Enable-ClipboardHistory }
+    if ($ctrl["ChkTweakAdvIconCache"].IsChecked)         { Increase-IconCacheSize; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvTaskbarEndTask"].IsChecked)    { Enable-TaskbarEndTask; $needsExplorerRestart = $true }
+    if ($ctrl["ChkTweakAdvServices"].IsChecked) {
+        $selected = $svcCheckboxes.Keys | Where-Object { $svcCheckboxes[$_].IsChecked }
+        Disable-SelectedServices -ServiceNames $selected
+    }
+
+    if ($needsExplorerRestart) { Restart-Explorer }
+
+    Write-Log "=== Advanced Tweaks (Tweaks section) pass complete. ===" "#4FD1C5"
+    $ctrl["StatusText"].Text = "Advanced tweaks applied."
 })
 
 # --- Apply Advanced Tweaks ---
